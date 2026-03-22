@@ -1,8 +1,18 @@
 % generate_final_gradient_dataset.m
-% 完整版：三维梯度多材料混合TPMS数据库生成
+% 完整版：三维梯度多材料混合TPMS数据库生成（带监控、邮件、错误捕获）
 % 设计维度：8种材料对 × 5种梯度函数 × 5种梯度方向 × 连续拓扑混合 × 连续尺寸/壁厚
 
 clear; clc;
+
+% ========== 配置 ==========
+email_to   = '你的监控邮箱@qq.com';           % ← 改成你自己的
+email_from = '你的gmail@gmail.com';            % ← 改成你自己的
+
+run_timestamp = datestr(now, 'yyyymmdd_HHMMSS');
+data_dir = fullfile(pwd, ['dataset_', run_timestamp]);
+if ~exist(data_dir, 'dir'), mkdir(data_dir); end
+
+manifest_file = fullfile(pwd, 'manifest.txt');
 
 % 确保当前目录在路径中（worker 继承 addpath，但不继承 cd）
 script_dir = fileparts(mfilename('fullpath'));
@@ -11,27 +21,26 @@ if isempty(script_dir)
 end
 addpath(script_dir);
 
-% ========== 1. 并行池启动 ==========
+% ========== 1.并行池（28核） ==========
 if license('test', 'Distrib_Computing_Toolbox')
-    [~, maxcores] = evalc('feature(''numcores'')');
-    use_cores = min(24, max(2, maxcores-4));
     pool = gcp('nocreate');
     if isempty(pool)
-        fprintf('启动并行池，使用 %d 个核心\n', use_cores);
-        pool = parpool('local', use_cores);
+        fprintf('启动并行池，使用 28 个 worker（32核留4核系统）\n');
+        parpool('local', 28);
     else
-        fprintf('并行池已运行，使用 %d 个核心\n', pool.NumWorkers);
+        fprintf('并行池已运行，使用 %d 个 worker\n', pool.NumWorkers);
     end
 
-    % ---- 关键：把所有依赖文件显式附加给 worker ----
-    % parfor worker 是独立进程，不继承主进程的工作目录，
-    % 必须通过 addAttachedFiles 告知每个 .m 文件的完整路径
+    % ---- 关键：把所有依赖文件显式附加给 worker ----(ori)
+    % parfor worker 是独立进程，不继承主进程的工作目录，(ori)
+    % 必须通过 addAttachedFiles 告知每个 .m 文件的完整路径(ori)
+    % 添加所有依赖文件到并行池，确保 worker 能找到它们
     needed_files = {
-        fullfile(script_dir, 'homo3D_multi.m'),
-        fullfile(script_dir, 'compute_stiffness_local.m'),
-        fullfile(script_dir, 'compute_gradient_field.m'),
-        fullfile(script_dir, 'compute_L.m'),
-        fullfile(script_dir, 'compute_tpms.m'),
+        fullfile(script_dir, 'homo3D_multi.m'), ...
+        fullfile(script_dir, 'compute_stiffness_local.m'), ...
+        fullfile(script_dir, 'compute_gradient_field.m'), ...
+        fullfile(script_dir, 'compute_L.m'), ...
+        fullfile(script_dir, 'compute_tpms.m'), ...
         fullfile(script_dir, 'generate_one_sample.m')
     };
     % 只附加实际存在的文件，缺失的跳过并给出警告
@@ -80,7 +89,9 @@ topology_types = {
     'FischerKoch', @(X,Y,Z) cos(2*X).*sin(Y).*cos(Z) + cos(2*Y).*sin(Z).*cos(X) + cos(2*Z).*sin(X).*cos(Y);
 };
 
-% ========== 5. 输出配置信息 ==========
+% ========== 输出配置信息 ==========
+fprintf('开始生成 - 时间戳: %s\n', run_timestamp);
+fprintf('输出目录: %s\n', data_dir);
 fprintf('拓扑库包含 %d 种基础类型\n', length(topology_types));
 fprintf('\n========================================\n');
 fprintf('三维梯度多材料混合TPMS数据库生成\n');
@@ -97,17 +108,36 @@ fprintf('开始生成数据...\n\n');
 
 tic;
 
-% ========== 6. 并行主循环 ==========
-parfor s = 1:N_samples
-    generate_one_sample(s, N_samples, materials, topology_types, ...
-        grad_types, grad_directions, grid_size, L_range, t_range);
+% ========== 主循环（加错误捕获） ==========
+try
+    parfor s = 1:N_samples
+        generate_one_sample(s, N_samples, materials, topology_types, ...
+            grad_types, grad_directions, grid_size, L_range, t_range, ...
+            data_dir);   % ← 新增 data_dir 参数
+    end
+
+    elapsed_time = toc;
+
+    % 正常完成记录 + 邮件
+    fid = fopen(manifest_file, 'a');
+    fprintf(fid, 'Run started: %s\n  Directory: %s\n  Samples: %d\n  Elapsed: %.1f min\n----------------------------------------\n', ...
+            run_timestamp, data_dir, N_samples, elapsed_time/60);
+    fclose(fid);
+
+    sendmail(email_to, 'TPMS数据集生成完成', ...
+        sprintf('Run %s 完成\n样本数: %d\n耗时: %.1f 分钟\n目录: %s', ...
+                run_timestamp, N_samples, elapsed_time/60, data_dir));
+
+catch ME
+    err_msg = getReport(ME, 'extended', 'hyperlinks', 'off');
+    error_save_file = fullfile(pwd, sprintf('ERROR_state_%s.mat', datestr(now,'yyyymmdd_HHMMSS')));
+    save(error_save_file, '-v7.3');
+
+    body = sprintf('【严重】TPMS生成出错！\n时间: %s\n错误:\n%s\n\n已保存状态: %s', ...
+                   datestr(now), err_msg, error_save_file);
+    sendmail(email_to, 'TPMS生成异常告警', body);
+
+    rethrow(ME);
 end
 
-elapsed_time = toc;
-
-fprintf('\n========================================\n');
-fprintf('生成完成！\n');
-fprintf('样本总数: %d\n', N_samples);
-fprintf('总耗时: %.2f 分钟 (%.2f 秒)\n', elapsed_time/60, elapsed_time);
-fprintf('平均每样本: %.2f 秒\n', elapsed_time/N_samples);
-fprintf('========================================\n');
+fprintf('生成完成！目录: %s\n', data_dir);
