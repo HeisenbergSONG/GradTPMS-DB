@@ -1,5 +1,6 @@
 function generate_one_sample(s, N_total, materials, topology_types, ...
-    grad_types, grad_directions, grid_size, L_range, t_range)
+    grad_types, grad_directions, grid_size, L_range, t_range,data_dir)
+    % ↑ 新增 data_dir 参数
 % generate_one_sample  生成单个梯度TPMS样本并保存为 .mat 文件
 %
 % param_field 第4维布局（共 2*n_topo+1 个通道）：
@@ -73,10 +74,10 @@ function generate_one_sample(s, N_total, materials, topology_types, ...
     end
 
     % ---- 保存文件 ----
-    filename = sprintf('sample_%04d.mat', s);
+    filename = fullfile(data_dir, sprintf('sample_%05d.mat', s));  % 5位数，支持大样本量
     save(filename, 'perf_field', 'param_field', '-v7.3');
 
     if mod(s, 10) == 0 || s == N_total || s == 1
-        fprintf('进度: %d/%d\n', s, N_total);
+        fprintf('进度: %d/%d  → %s\n', s, N_total, filename);
     end
 end
