@@ -58,7 +58,7 @@ if license('test', 'Distrib_Computing_Toolbox')
     end
 end
 
-% ========== 2. 材料库 ==========
+% ========== 2. 材料库+(按实际的来) ==========
 materials = {
     120, 0.34,   2, 0.40, "Ti6Al4V",    "PLA",      "biomedical_aerospace";
     75,  0.33,   2, 0.40, "NiTi",        "PLA",      "smart_structure";
@@ -70,15 +70,15 @@ materials = {
     230, 0.31,   2, 0.40, "CoCr",        "PLA",      "orthopedic_implant";
 };
 
-% ========== 3. 参数设置 ==========
-N_samples      = 100;
+% ========== 3. 参数设置(按需调整) ==========
+N_samples      = 200;
 grid_size      = [48, 48, 48];
 L_range        = [0.5, 10.0];
 t_range        = [-1.5, 1.5];
 grad_types     = {'linear', 'quadratic', 'sigmoid', 'radial', 'multi_axial'};
 grad_directions = {'z', 'x', 'y', 'radial', 'coupled'};
 
-% ========== 4. 拓扑类型定义 ==========
+% ========== 4. 拓扑类型定义 (按实际的来)==========
 topology_types = {
     'Neovius',     @(X,Y,Z) 3*(cos(X)+cos(Y)+cos(Z)) + 4*cos(X).*cos(Y).*cos(Z);
     'SchoenIWP',   @(X,Y,Z) 2*(cos(X).*cos(Y)+cos(Y).*cos(Z)+cos(Z).*cos(X)) - (cos(2*X)+cos(2*Y)+cos(2*Z));
