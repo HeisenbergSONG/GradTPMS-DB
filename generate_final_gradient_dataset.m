@@ -22,40 +22,52 @@ end
 addpath(script_dir);
 
 % ========== 1.并行池（28核） ==========
-if license('test', 'Distrib_Computing_Toolbox')
-    pool = gcp('nocreate');
-    if isempty(pool)
-        fprintf('启动并行池，使用 28 个 worker（32核留4核系统）\n');
-        parpool('local', 28);
-    else
-        fprintf('并行池已运行，使用 %d 个 worker\n', pool.NumWorkers);
-    end
 
-    % ---- 关键：把所有依赖文件显式附加给 worker ----(ori)
-    % parfor worker 是独立进程，不继承主进程的工作目录，(ori)
-    % 必须通过 addAttachedFiles 告知每个 .m 文件的完整路径(ori)
-    % 添加所有依赖文件到并行池，确保 worker 能找到它们
-    needed_files = {
+pool = gcp('nocreate');   % 获取当前池（如果有）
+
+if isempty(pool)
+    fprintf('没有找到现有并行池，正在启动 %d 个 worker...\n', 28);
+    try
+        pool = parpool('Processes', 28);   % 显式使用 'Processes' profile（更稳定）
+        % 或者 pool = parpool('local', 28);  % 如果你有自定义 local profile
+        fprintf('并行池启动成功，已连接 %d 个 worker\n', pool.NumWorkers);
+    catch ME
+        fprintf('并行池启动失败：%s\n', ME.message);
+        fprintf('将使用单线程模式继续（性能会大幅下降）\n');
+        pool = [];   % 明确置空，避免后续误用
+    end
+else
+    fprintf('复用已有并行池，已有 %d 个 worker\n', pool.NumWorkers);
+end
+
+% ---- 只有当 pool 非空时才附加文件 ----
+if ~isempty(pool) && isa(pool, 'parallel.Pool')
+    % 你的文件列表收集逻辑（已有代码很好）
+    needed_files = { ...
         fullfile(script_dir, 'homo3D_multi.m'), ...
         fullfile(script_dir, 'compute_stiffness_local.m'), ...
         fullfile(script_dir, 'compute_gradient_field.m'), ...
         fullfile(script_dir, 'compute_L.m'), ...
         fullfile(script_dir, 'compute_tpms.m'), ...
-        fullfile(script_dir, 'generate_one_sample.m')
-    };
-    % 只附加实际存在的文件，缺失的跳过并给出警告
+        fullfile(script_dir, 'generate_one_sample.m') };
+    
     existing = {};
     for k = 1:length(needed_files)
         if exist(needed_files{k}, 'file')
-            existing{end+1} = needed_files{k}; %#ok<AGROW>
+            existing{end+1} = needed_files{k};
         else
-            fprintf('警告：找不到文件 %s，worker 可能无法访问\n', needed_files{k});
+            fprintf('警告：文件缺失，无法附加 → %s\n', needed_files{k});
         end
     end
+    
     if ~isempty(existing)
         addAttachedFiles(pool, existing);
-        fprintf('已附加 %d 个文件到并行池\n', length(existing));
+        fprintf('成功附加 %d 个依赖文件到并行池\n', length(existing));
+    else
+        fprintf('没有有效文件需要附加\n');
     end
+else
+    fprintf('无有效并行池，跳过文件附加（parfor 可能因找不到函数而失败）\n');
 end
 
 % ========== 2. 材料库+(按实际的来) ==========
