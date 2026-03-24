@@ -5,8 +5,8 @@
 clear; clc;
 
 % ========== 配置 ==========
-email_to   = '你的监控邮箱@qq.com';           % ← 改成你自己的
-email_from = '你的gmail@gmail.com';            % ← 改成你自己的
+email_to   = '你的监控邮箱@qq.com';           % ← 改成你自己的(接受人)
+email_from = '你的gmail@gmail.com';            % ← 改成你自己的(发件人)
 
 run_timestamp = datestr(now, 'yyyymmdd_HHMMSS');
 data_dir = fullfile(pwd, ['dataset_', run_timestamp]);
@@ -89,6 +89,14 @@ L_range        = [0.5, 10.0];
 t_range        = [-1.5, 1.5];
 grad_types     = {'linear', 'quadratic', 'sigmoid', 'radial', 'multi_axial'};
 grad_directions = {'z', 'x', 'y', 'radial', 'coupled'};
+% ================== 新增：正则化系数（可全局调整） ==================
+reg_coeff = 1e-8;     % 正则化系数，默认值 1e-8
+                      % 推荐范围：
+                      %   1e-10 ~ 1e-9   → 低对比材料（精度优先）
+                      %   1e-8           → 常规使用
+                      %   1e-7 ~ 5e-7    → 高对比材料（如金属-塑料）
+                      %   1e-6           → 极难收敛时使用（会略微损失精度）
+% =================================================================
 
 % ========== 4. 拓扑类型定义 (按实际的来)==========
 topology_types = {
@@ -125,7 +133,7 @@ try
     parfor s = 1:N_samples
         generate_one_sample(s, N_samples, materials, topology_types, ...
             grad_types, grad_directions, grid_size, L_range, t_range, ...
-            data_dir);   % ← 新增 data_dir 参数
+            data_dir, reg_coeff);   % ← 新增 data_dir 和 reg_coeff 参数
     end
 
     elapsed_time = toc;

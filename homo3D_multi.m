@@ -1,4 +1,4 @@
-function CH = homo3D_multi(lx, ly, lz, lambda_vec, mu_vec, voxel)
+function CH = homo3D_multi(lx, ly, lz, lambda_vec, mu_vec, voxel,reg_coeff)
 % homo3D_multi  三维周期复合材料均匀化（六面体单元，周期边界条件）
 %
 % 输入：
@@ -76,14 +76,26 @@ function CH = homo3D_multi(lx, ly, lz, lambda_vec, mu_vec, voxel)
     jF = repmat(1:6, 24*nel, 1);            % (24*nel) × 6
     F  = sparse(iF(:), jF(:), sF_mat(:), ndof, 6);
 
+    
     % ---- 求解特征位移 X (ndof×6) ----
     activedofs = sort(unique(edof(vf ~= 0, :)));
     X = zeros(ndof, 6);
     if length(activedofs) > 3
         fixeddofs = activedofs(1:3);
         freedofs  = setdiff(1:ndof, fixeddofs);
-        K_free    = K(freedofs, freedofs) + 1e-10 * speye(length(freedofs));
-        X(freedofs, :) = K_free \ F(freedofs, :);
+        
+        K_free = K(freedofs, freedofs);
+        F_free = F(freedofs, :);
+        
+        % ================== 正则化系数（新增可调功能） ==================
+        if nargin < 7 || isempty(reg_coeff) || ~isnumeric(reg_coeff)
+            reg_coeff = 1e-10;                 % 默认安全值
+        end
+        K_free = K_free + reg_coeff * speye(length(freedofs));
+        % =================================================================
+        
+        % 求解（直接法，适合 30^3 网格）
+        X(freedofs, :) = K_free \ F_free;
     end
 
     % ---- 基础应变场 X0 (nel×24×6) ----

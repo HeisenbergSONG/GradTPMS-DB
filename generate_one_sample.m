@@ -1,8 +1,7 @@
 function generate_one_sample(s, N_total, materials, topology_types, ...
-    grad_types, grad_directions, grid_size, L_range, t_range,data_dir)
-    % ↑ 新增 data_dir 参数
-% generate_one_sample  生成单个梯度TPMS样本并保存为 .mat 文件
-%
+    grad_types, grad_directions, grid_size, L_range, t_range, data_dir, reg_coeff)
+    % generate_one_sample  生成单个梯度TPMS样本并保存为 .mat 文件
+    % ↑ 已新增 data_dir 和 reg_coeff 参数
 % param_field 第4维布局（共 2*n_topo+1 个通道）：
 %   槽 1        ~ n_topo     : 混合权重 w（每种拓扑）
 %   槽 n_topo+1 ~ 2*n_topo   : 水平集常数 t（每种拓扑）
@@ -37,7 +36,6 @@ function generate_one_sample(s, N_total, materials, topology_types, ...
     t_vec = t_range(1) + (t_range(2)-t_range(1)) * rand(1, n_topo);
 
     % ---- 初始化场数组 ----
-    % 修复：第4维正确大小为 2*n_topo+1（w×n + t×n + L×1）
     n_channels = 2*n_topo + 1;
     param_field = zeros([grid_size, n_channels]);
     perf_field  = zeros([grid_size, 9]);
@@ -63,8 +61,9 @@ function generate_one_sample(s, N_total, materials, topology_types, ...
                 param_field(ix, iy, iz, idx_t) = t_vec;
                 param_field(ix, iy, iz, idx_L) = L;
 
-                % 计算局部等效刚度
-                C = compute_stiffness_local(w, t_vec, L, [E1, nu1, E2, nu2], topology_types);
+                % 计算局部等效刚度 ← 传入 reg_coeff
+                C = compute_stiffness_local(w, t_vec, L, [E1, nu1, E2, nu2], topology_types, reg_coeff);
+                
                 C_gpa = C / 1e9;
                 perf_field(ix, iy, iz, :) = [C_gpa(1,1), C_gpa(2,2), C_gpa(3,3), ...
                                               C_gpa(1,2), C_gpa(1,3), C_gpa(2,3), ...

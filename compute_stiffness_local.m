@@ -1,15 +1,6 @@
-function C = compute_stiffness_local(w, t, L, mat, topology_types)
+function C = compute_stiffness_local(w, t, L, mat, topology_types,reg_coeff)
 % compute_stiffness_local  计算局部等效刚度矩阵 (Pa)
-%
-% 输入：
-%   w              - 拓扑混合权重向量 [1×n_topo]，和为1
-%   t              - 各拓扑水平集常数 [1×n_topo]
-%   L              - 单元胞尺寸 (mm)
-%   mat            - [E1(GPa), nu1, E2(GPa), nu2]
-%   topology_types - 拓扑库 cell array，{名称, @(X,Y,Z)函数句柄}
-%
-% 输出：
-%   C              - 6×6 等效刚度矩阵 (Pa)
+% ↑ 新增参数 reg_coeff（传递正则化系数）
 
     res = [30, 30, 30];
 
@@ -35,7 +26,7 @@ function C = compute_stiffness_local(w, t, L, mat, topology_types)
     mu2     = E2*1e9        / (2*(1+nu2));
 
     % ---- 均匀化 ----
-    C_unit = homo3D_multi(1, 1, 1, [lambda1, lambda2], [mu1, mu2], voxel);
+    C_unit = homo3D_multi(1, 1, 1, [lambda1, lambda2], [mu1, mu2], voxel,reg_coeff);
 
     % ---- 尺寸缩放（幂律 α=1.5）----
     C = C_unit * (L ^ (-1.5));
